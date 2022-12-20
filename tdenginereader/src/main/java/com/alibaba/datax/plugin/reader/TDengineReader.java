@@ -5,6 +5,7 @@ import com.alibaba.datax.common.exception.DataXException;
 import com.alibaba.datax.common.plugin.RecordSender;
 import com.alibaba.datax.common.spi.Reader;
 import com.alibaba.datax.common.util.Configuration;
+import com.alibaba.datax.plugin.writer.tdenginewriter.Constants;
 import com.alibaba.datax.plugin.writer.tdenginewriter.Key;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -15,8 +16,6 @@ import java.sql.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 public class TDengineReader extends Reader {
@@ -47,6 +46,12 @@ public class TDengineReader extends Reader {
             if (connectionList == null || connectionList.isEmpty())
                 throw DataXException.asDataXException(TDengineReaderErrorCode.REQUIRED_VALUE,
                         "The parameter [" + Key.CONNECTION + "] is not set.");
+            // fetchSize
+            int fetchSize = this.originalConfig.getInt(Key.FETCH_SIZE, Constants.DEFAULT_FETCH_SIZE);
+            if (fetchSize < 1) {
+                throw DataXException.asDataXException(TDengineReaderErrorCode.ILLEGAL_VALUE, "The parameter [" + Key.FETCH_SIZE + "] is incorrect.");
+            }
+            this.originalConfig.set(Key.FETCH_SIZE, fetchSize);
             for (int i = 0; i < connectionList.size(); i++) {
                 Configuration conn = connectionList.get(i);
                 // check jdbcUrl
@@ -185,6 +190,8 @@ public class TDengineReader extends Reader {
         public void startRead(RecordSender recordSender) {
             List<String> sqlList = new ArrayList<>();
 
+            int fetchSize = this.readerSliceConfig.getInt(Key.FETCH_SIZE);
+
             if (querySql == null || querySql.isEmpty()) {
                 for (String table : tables) {
                     StringBuilder sb = new StringBuilder();
@@ -205,6 +212,7 @@ public class TDengineReader extends Reader {
 
             for (String sql : sqlList) {
                 try (Statement stmt = conn.createStatement()) {
+                    stmt.setFetchSize(fetchSize);
                     ResultSet rs = stmt.executeQuery(sql);
                     while (rs.next()) {
                         Record record = buildRecord(recordSender, rs, mandatoryEncoding);
